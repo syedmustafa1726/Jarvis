@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS HUD</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #000; overflow-x: hidden; }
+        .hud { background: #000; min-height: 100vh; font-family: 'Courier New', monospace; position: relative; overflow: hidden; padding: 10px; }
+        .hud::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 30%, #001830 0%, #000 70%); pointer-events: none; }
+        .scanline { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,180,255,0.015) 2px, rgba(0,180,255,0.015) 4px); pointer-events: none; z-index: 1; }
+        .grid { display: grid; grid-template-columns: 180px 1fr 180px; grid-template-rows: auto 1fr auto; gap: 8px; position: relative; z-index: 2; }
+        .panel { border: 1px solid rgba(0,180,255,0.25); border-radius: 4px; background: rgba(0,15,35,0.85); padding: 8px; }
+        .panel-title { color: rgba(0,180,255,0.6); font-size: 8px; letter-spacing: 3px; border-bottom: 1px solid rgba(0,180,255,0.2); padding-bottom: 4px; margin-bottom: 8px; }
+        .corner { position: absolute; width: 16px; height: 16px; border-color: #00b4ff; border-style: solid; z-index: 3; }
+        .corner-tl { top: 4px; left: 4px; border-width: 2px 0 0 2px; }
+        .corner-tr { top: 4px; right: 4px; border-width: 2px 2px 0 0; }
+        .corner-bl { bottom: 4px; left: 4px; border-width: 0 0 2px 2px; }
+        .corner-br { bottom: 4px; right: 4px; border-width: 0 2px 2px 0; }
+        .left-col { grid-column: 1; grid-row: 1 / 4; display: flex; flex-direction: column; gap: 8px; }
+        .center-top { grid-column: 2; grid-row: 1; }
+        .center-mid { grid-column: 2; grid-row: 2; }
+        .center-bot { grid-column: 2; grid-row: 3; }
+        .right-col { grid-column: 3; grid-row: 1 / 4; display: flex; flex-direction: column; gap: 8px; }
+        .arc-container { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px 8px; }
+        .rings { position: relative; width: 120px; height: 120px; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+        .ring { position: absolute; border-radius: 50%; border: 1px solid rgba(0,180,255,0.2); animation: spin linear infinite; }
+        .r1 { width: 120px; height: 120px; border-top-color: #00b4ff; animation-duration: 6s; }
+        .r2 { width: 90px; height: 90px; border-right-color: #00b4ff; animation-duration: 4s; animation-direction: reverse; }
+        .r3 { width: 62px; height: 62px; border-bottom-color: rgba(0,180,255,0.5); animation-duration: 8s; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .arc { width: 36px; height: 36px; border-radius: 50%; background: radial-gradient(circle, #fff 0%, #00b4ff 50%, #003 100%); box-shadow: 0 0 15px #00b4ff, 0 0 30px rgba(0,180,255,0.4); animation: apulse 2s ease-in-out infinite; position: relative; z-index: 2; }
+        @keyframes apulse { 0%,100% { box-shadow: 0 0 15px #00b4ff, 0 0 30px rgba(0,180,255,0.3); } 50% { box-shadow: 0 0 25px #00b4ff, 0 0 50px rgba(0,180,255,0.6); } }
+        .jarvis-name { color: #00b4ff; font-size: 20px; font-weight: bold; letter-spacing: 8px; text-shadow: 0 0 10px #00b4ff; text-align: center; }
+        .status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #00ff88; box-shadow: 0 0 6px #00ff88; animation: blink 1.5s infinite; margin-right: 4px; }
+        @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .status-line { color: rgba(0,180,255,0.6); font-size: 9px; letter-spacing: 2px; text-align: center; margin-top: 4px; }
+        .stat-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+        .stat-label { color: rgba(0,180,255,0.5); font-size: 8px; letter-spacing: 1px; }
+        .stat-val { color: #00b4ff; font-size: 10px; font-weight: bold; }
+        .bar { height: 3px; background: rgba(0,180,255,0.15); border-radius: 2px; margin-bottom: 8px; overflow: hidden; }
+        .bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #003, #00b4ff); }
+        .radar { position: relative; width: 100%; max-width: 140px; margin: 0 auto; }
+        .radar svg { width: 100%; height: 100%; }
+        .messages { height: 200px; overflow-y: auto; padding: 4px; }
+        .msg { margin-bottom: 8px; font-size: 11px; line-height: 1.4; }
+        .msg-user { text-align: right; }
+        .msg-user .bubble { background: rgba(0,80,160,0.3); border: 1px solid rgba(0,180,255,0.2); color: rgba(255,255,255,0.85); padding: 4px 8px; border-radius: 6px 6px 0 6px; display: inline-block; max-width: 90%; }
+        .msg-jarvis .bubble { background: rgba(0,30,60,0.5); border-left: 2px solid #00b4ff; color: #00b4ff; padding: 4px 8px; border-radius: 0 6px 6px 6px; display: inline-block; max-width: 90%; }
+        .msg-label { font-size: 7px; letter-spacing: 2px; color: rgba(0,180,255,0.4); margin-bottom: 2px; }
+        .msg-user .msg-label { text-align: right; }
+        .input-row { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
+        .hud-input { flex: 1; background: rgba(0,20,50,0.8); border: 1px solid rgba(0,180,255,0.3); border-radius: 3px; color: #fff; padding: 8px 12px; font-family: 'Courier New', monospace; font-size: 11px; outline: none; }
+        .hud-input:focus { border-color: #00b4ff; box-shadow: 0 0 6px rgba(0,180,255,0.3); }
+        .hud-btn { background: rgba(0,50,120,0.5); border: 1px solid #00b4ff; color: #00b4ff; padding: 8px 10px; border-radius: 3px; cursor: pointer; font-family: 'Courier New', monospace; font-size: 8px; letter-spacing: 1px; white-space: nowrap; transition: all 0.2s; }
+        .hud-btn:hover { background: rgba(0,100,200,0.5); }
+        .mic-active { border-color: #ff0000 !important; color: #ff0000 !important; box-shadow: 0 0 10px rgba(255,0,0,0.4) !important; }
+        .thinking { color: rgba(0,255,136,0.7); font-size: 8px; letter-spacing: 2px; height: 14px; margin-bottom: 4px; }
+        .log-item { font-size: 8px; color: rgba(0,180,255,0.5); margin-bottom: 4px; border-left: 1px solid rgba(0,180,255,0.2); padding-left: 6px; }
+        .log-time { color: rgba(0,180,255,0.3); }
+        .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .metric { text-align: center; background: rgba(0,20,50,0.5); border: 1px solid rgba(0,180,255,0.15); border-radius: 3px; padding: 8px 4px; }
+        .metric-val { color: #00b4ff; font-size: 13px; font-weight: bold; text-shadow: 0 0 6px #00b4ff; }
+        .metric-lbl { color: rgba(0,180,255,0.4); font-size: 7px; letter-spacing: 1px; margin-top: 2px; }
+        .terminal-line { font-size: 8px; color: rgba(0,255,136,0.7); margin-bottom: 3px; }
+        .terminal-cursor { display: inline-block; width: 6px; height: 10px; background: #00ff88; animation: blink 1s infinite; vertical-align: middle; }
+        ::-webkit-scrollbar { width: 3px; }
+        ::-webkit-scrollbar-track { background: rgba(0,20,40,0.3); }
+        ::-webkit-scrollbar-thumb { background: rgba(0,180,255,0.3); }
+    </style>
+</head>
+<body>
+<div class="hud">
+    <div class="scanline"></div>
+    <div class="corner corner-tl"></div>
+    <div class="corner corner-tr"></div>
+    <div class="corner corner-bl"></div>
+    <div class="corner corner-br"></div>
+
+    <div class="grid">
+        <div class="left-col">
+            <div class="panel">
+                <div class="panel-title">SYSTEM VITALS</div>
+                <div class="stat-row"><span class="stat-label">CPU</span><span class="stat-val" id="cpu">47%</span></div>
+                <div class="bar"><div class="bar-fill" id="cpu-bar" style="width:47%"></div></div>
+                <div class="stat-row"><span class="stat-label">MEMORY</span><span class="stat-val" id="mem">62%</span></div>
+                <div class="bar"><div class="bar-fill" id="mem-bar" style="width:62%"></div></div>
+                <div class="stat-row"><span class="stat-label">NETWORK</span><span class="stat-val">ONLINE</span></div>
+                <div class="bar"><div class="bar-fill" style="width:90%"></div></div>
+                <div class="stat-row"><span class="stat-label">OLLAMA</span><span class="stat-val">ACTIVE</span></div>
+                <div class="bar"><div class="bar-fill" style="width:100%"></div></div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">RADAR</div>
+                <div class="radar">
+                    <svg viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(0,180,255,0.15)" stroke-width="0.5"/>
+                        <circle cx="50" cy="50" r="30" fill="none" stroke="rgba(0,180,255,0.15)" stroke-width="0.5"/>
+                        <circle cx="50" cy="50" r="15" fill="none" stroke="rgba(0,180,255,0.2)" stroke-width="0.5"/>
+                        <line x1="50" y1="5" x2="50" y2="95" stroke="rgba(0,180,255,0.1)" stroke-width="0.5"/>
+                        <line x1="5" y1="50" x2="95" y2="50" stroke="rgba(0,180,255,0.1)" stroke-width="0.5"/>
+                        <path d="M50,50 L50,5 A45,45 0 0,1 95,50 Z" fill="rgba(0,180,255,0.08)" id="radar-sweep"/>
+                        <circle cx="50" cy="50" r="3" fill="#00b4ff" opacity="0.8"/>
+                        <circle cx="72" cy="35" r="2" fill="#00ff88" opacity="0.8"/>
+                        <circle cx="30" cy="65" r="2" fill="#ff6b35" opacity="0.8"/>
+                        <circle cx="60" cy="70" r="2" fill="#00ff88" opacity="0.8"/>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">ACTIVITY LOG</div>
+                <div id="log-panel">
+                    <div class="log-item"><span class="log-time">00:00 </span>System boot</div>
+                    <div class="log-item"><span class="log-time">00:01 </span>LLaMA loaded</div>
+                    <div class="log-item"><span class="log-time">00:02 </span>Memory online</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="center-top panel arc-container">
+            <div class="rings">
+                <div class="ring r1"></div>
+                <div class="ring r2"></div>
+                <div class="ring r3"></div>
+                <div class="arc"></div>
+            </div>
+            <div class="jarvis-name">J.A.R.V.I.S</div>
+            <div class="status-line"><span class="status-dot"></span><span id="status-text">ALL SYSTEMS NOMINAL</span></div>
+        </div>
+
+        <div class="center-mid panel">
+            <div class="panel-title">COMMUNICATION INTERFACE</div>
+            <div class="thinking" id="thinking"></div>
+            <div class="messages" id="messages">
+                <div class="msg msg-jarvis">
+                    <div class="msg-label">JARVIS</div>
+                    <div class="bubble">Good day Sir. J.A.R.V.I.S online. All systems operational. How may I assist you?</div>
+                </div>
+            </div>
+            <div class="input-row">
+                <button class="hud-btn" id="mic-btn" onclick="startVoice()">🎤 SPEAK</button>
+                <input class="hud-input" id="user-input" placeholder="Enter command..." onkeydown="if(event.key==='Enter') sendMessage()"/>
+                <button class="hud-btn" onclick="sendMessage()">TRANSMIT</button>
+            </div>
+        </div>
+
+        <div class="center-bot panel">
+            <div class="panel-title">TERMINAL</div>
+            <div id="terminal">
+                <div class="terminal-line">> JARVIS v2.0 initialized</div>
+                <div class="terminal-line">> Voice module: ACTIVE</div>
+                <div class="terminal-line">> Memory module: ACTIVE</div>
+                <div class="terminal-line">> Search module: ACTIVE</div>
+                <div class="terminal-line">> Awaiting command <span class="terminal-cursor"></span></div>
+            </div>
+        </div>
+
+        <div class="right-col">
+            <div class="panel">
+                <div class="panel-title">METRICS</div>
+                <div class="metrics">
+                    <div class="metric"><div class="metric-val" id="msg-count">0</div><div class="metric-lbl">MESSAGES</div></div>
+                    <div class="metric"><div class="metric-val" id="time-val">--:--</div><div class="metric-lbl">TIME</div></div>
+                    <div class="metric"><div class="metric-val">3B</div><div class="metric-lbl">MODEL</div></div>
+                    <div class="metric"><div class="metric-val">LOCAL</div><div class="metric-lbl">SERVER</div></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">POWER SYSTEMS</div>
+                <div class="stat-row"><span class="stat-label">ARC REACTOR</span><span class="stat-val">100%</span></div>
+                <div class="bar"><div class="bar-fill" style="width:100%"></div></div>
+                <div class="stat-row"><span class="stat-label">REPULSORS</span><span class="stat-val">READY</span></div>
+                <div class="bar"><div class="bar-fill" style="width:85%"></div></div>
+                <div class="stat-row"><span class="stat-label">AI CORE</span><span class="stat-val">ACTIVE</span></div>
+                <div class="bar"><div class="bar-fill" style="width:78%"></div></div>
+                <div class="stat-row"><span class="stat-label">MEMORY</span><span class="stat-val">ONLINE</span></div>
+                <div class="bar"><div class="bar-fill" style="width:62%"></div></div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">ACTIVE MODULES</div>
+                <div class="log-item" style="color:rgba(0,255,136,0.7)">● WHISPER STT</div>
+                <div class="log-item" style="color:rgba(0,255,136,0.7)">● ELEVENLABS TTS</div>
+                <div class="log-item" style="color:rgba(0,255,136,0.7)">● CHROMADB MEM</div>
+                <div class="log-item" style="color:rgba(0,255,136,0.7)">● TAVILY SEARCH</div>
+                <div class="log-item" style="color:rgba(0,255,136,0.7)">● FASTAPI SERVER</div>
+                <div class="log-item" style="color:rgba(0,255,136,0.7)">● LLAMA 3.2 LLM</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+let msgCount = 0;
+
+function updateTime() {
+    const now = new Date();
+    const h = now.getHours().toString().padStart(2,'0');
+    const m = now.getMinutes().toString().padStart(2,'0');
+    document.getElementById('time-val').textContent = h + ':' + m;
+}
+updateTime();
+setInterval(updateTime, 30000);
+
+function randomize() {
+    const cpu = 30 + Math.floor(Math.random()*40);
+    const mem = 50 + Math.floor(Math.random()*30);
+    document.getElementById('cpu').textContent = cpu + '%';
+    document.getElementById('mem').textContent = mem + '%';
+    document.getElementById('cpu-bar').style.width = cpu + '%';
+    document.getElementById('mem-bar').style.width = mem + '%';
+}
+setInterval(randomize, 4000);
+
+function addLog(text) {
+    const now = new Date();
+    const t = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+    const log = document.getElementById('log-panel');
+    const div = document.createElement('div');
+    div.className = 'log-item';
+    div.innerHTML = '<span class="log-time">' + t + ' </span>' + text;
+    log.appendChild(div);
+    if (log.children.length > 6) log.removeChild(log.children[0]);
+}
+
+function addTerminal(text) {
+    const term = document.getElementById('terminal');
+    const div = document.createElement('div');
+    div.className = 'terminal-line';
+    div.textContent = '> ' + text;
+    term.insertBefore(div, term.lastElementChild);
+    if (term.children.length > 8) term.removeChild(term.children[0]);
+}
+
+function addMessage(role, text) {
+    const box = document.getElementById('messages');
+    const div = document.createElement('div');
+    div.className = 'msg msg-' + role;
+    const label = document.createElement('div');
+    label.className = 'msg-label';
+    label.textContent = role === 'user' ? 'MUSTAFA' : 'JARVIS';
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = text;
+    div.appendChild(label);
+    div.appendChild(bubble);
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+    msgCount++;
+    document.getElementById('msg-count').textContent = msgCount;
+}
+
+async function sendMessage() {
+    const input = document.getElementById('user-input');
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    addMessage('user', text);
+    addLog('Command received');
+    addTerminal('Processing: ' + text.substring(0,25) + '...');
+    document.getElementById('thinking').textContent = '... JARVIS PROCESSING ...';
+    document.getElementById('status-text').textContent = 'PROCESSING COMMAND';
+    try {
+        const res = await fetch(API + '/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text, user_name: 'Mustafa' })
+        });
+        const data = await res.json();
+        const reply = data.response || data.message || 'Systems error Sir.';
+        addMessage('jarvis', reply);
+        addLog('Response transmitted');
+        addTerminal('Response delivered to Sir');
+        speakResponse(reply);
+    } catch(e) {
+        addMessage('jarvis', 'Backend offline Sir. Start server on port 8000.');
+        addLog('ERROR: Backend offline');
+    }
+    document.getElementById('thinking').textContent = '';
+    document.getElementById('status-text').textContent = 'ALL SYSTEMS NOMINAL';
+}
+
+function startVoice() {
+    const btn = document.getElementById('mic-btn');
+    if (!('SpeechRecognition' in window) && !('webkitSpeechRecognition' in window)) {
+        alert('Voice not supported. Use Chrome browser!');
+        return;
+    }
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    btn.textContent = '🔴 LISTENING';
+    btn.classList.add('mic-active');
+    document.getElementById('status-text').textContent = 'LISTENING...';
+    addLog('Voice input activated');
+
+    recognition.onresult = function(e) {
+        const text = e.results[0][0].transcript;
+        document.getElementById('user-input').value = text;
+        btn.textContent = '🎤 SPEAK';
+        btn.classList.remove('mic-active');
+        addTerminal('Voice: ' + text.substring(0,20));
+        sendMessage();
+    };
+
+    recognition.onerror = function(e) {
+        btn.textContent = '🎤 SPEAK';
+        btn.classList.remove('mic-active');
+        document.getElementById('status-text').textContent = 'ALL SYSTEMS NOMINAL';
+        addLog('Voice error: ' + e.error);
+    };
+
+    recognition.onend = function() {
+        btn.textContent = '🎤 SPEAK';
+        btn.classList.remove('mic-active');
+    };
+
+    recognition.start();
+}
+
+function speakResponse(text) {
+    if ('speechSynthesis' in window) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 0.9;
+        utterance.pitch = 0.8;
+        utterance.volume = 1;
+        const voices = speechSynthesis.getVoices();
+        const preferred = voices.find(v => v.name.includes('Google UK English Male') || v.name.includes('Daniel'));
+        if (preferred) utterance.voice = preferred;
+        speechSynthesis.speak(utterance);
+    }
+}
+
+setInterval(() => {
+    const sweep = document.getElementById('radar-sweep');
+    if (sweep) {
+        const angle = (Date.now() / 20) % 360;
+        const rad = angle * Math.PI / 180;
+        const x = 50 + 45 * Math.sin(rad);
+        const y = 50 - 45 * Math.cos(rad);
+        const large = angle > 180 ? 1 : 0;
+        sweep.setAttribute('d', 'M50,50 L50,5 A45,45 0 ' + large + ',1 ' + x.toFixed(1) + ',' + y.toFixed(1) + ' Z');
+    }
+}, 50);
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+venv311/
+.venv/
+.env
+__pycache__/
+*.pyc
+*.pyd
+*.dll
+*.so
+*.lib
+*.exe
+*.whl
+memory_db/
+.streamlit/
+chroma_db/
+*.egg-info/
