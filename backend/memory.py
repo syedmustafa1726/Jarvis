@@ -1,8 +1,7 @@
-import json
+﻿import json
 import os
 from datetime import datetime
 
-# Works on both Windows and Linux
 MEMORY_FILE = os.path.join(os.path.dirname(__file__), "memory_db", "memory.json")
 
 def ensure_file():
