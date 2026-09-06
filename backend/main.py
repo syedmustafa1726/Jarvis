@@ -55,11 +55,16 @@ async def broadcast(event_type: str, data=None):
 
 
 @app.get("/")
-def root():
-    return {
-        "status": "JARVIS is online",
-        "version": "2.1.0"
-    }
+async def root():
+    hud_path = os.path.join(static_dir, "hud.html")
+    if os.path.exists(hud_path):
+        return FileResponse(hud_path)
+    return {"status": "JARVIS is online", "version": "2.1.0"}
+
+
+@app.get("/status")
+def status():
+    return {"status": "JARVIS is online", "version": "2.1.0"}
 
 
 @app.get("/hud")
