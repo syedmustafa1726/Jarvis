@@ -26,7 +26,7 @@ class JarvisAgentV2:
         self.conversation_id = str(uuid.uuid4())
         self.history = []
         self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        self.model = "llama-3.2-3b-preview"
+        self.model = "llama-3.1-8b-instant"
 
     async def chat(self, user_message: str, user_name: str = "Sir") -> str:
         msg_lower = user_message.lower()
